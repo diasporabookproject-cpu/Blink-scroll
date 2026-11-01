@@ -4,10 +4,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.os.VibrationEffect
@@ -15,8 +19,11 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import android.util.Size
+import android.view.OrientationEventListener
+import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.CameraState
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -36,21 +43,31 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Foreground service that keeps the front camera running, detects winks/blinks
- * with ML Kit and asks [ScrollAccessibilityService] to swipe.
+ * Foreground service that runs the front camera, detects winks/blinks with ML Kit
+ * and asks [ScrollAccessibilityService] to swipe.
  *
- * It must be started while the app is visible (Android only lets a foreground
- * service use the camera if it was started from the foreground).
+ * It must be started while the app is visible: Android only lets a foreground
+ * service use the camera from the background if it was started from the foreground.
+ *
+ * To save battery the camera is switched off when the screen is off or when neither
+ * TikTok/Instagram nor the settings screen is in front, and switched back on when needed.
  */
 class BlinkCameraService : LifecycleService() {
 
     private lateinit var settings: AppSettings
     private lateinit var powerManager: PowerManager
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var faceDetector: FaceDetector? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageAnalysis: ImageAnalysis? = null
+    private var cameraBound = false
+    private var receiverRegistered = false
+    private var orientationListener: OrientationEventListener? = null
     private val detector = BlinkDetector()
+
+    @Volatile
+    private var destroyed = false
 
     /** Set from the analysis thread when frames were skipped; read on the main thread. */
     @Volatile
@@ -64,6 +81,12 @@ class BlinkCameraService : LifecycleService() {
             getSystemService(Vibrator::class.java)
         }
     }
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) = refreshCameraState()
+    }
+
+    private val pauseCamera = Runnable { setCameraActive(false) }
 
     override fun onCreate() {
         super.onCreate()
@@ -92,11 +115,33 @@ class BlinkCameraService : LifecycleService() {
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                 .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-                .setMinFaceSize(0.2f)
+                .setMinFaceSize(0.15f)
                 .build(),
         )
         LiveState.update { it.copy(running = true, error = null) }
-        startCamera()
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        receiverRegistered = true
+        LiveState.contextChanged = { refreshCameraState() }
+
+        orientationListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                // Keep the face upright for ML Kit even when the phone is turned sideways.
+                imageAnalysis?.targetRotation = when (orientation) {
+                    in 45..134 -> Surface.ROTATION_270
+                    in 135..224 -> Surface.ROTATION_180
+                    in 225..314 -> Surface.ROTATION_90
+                    else -> Surface.ROTATION_0
+                }
+            }
+        }.also { if (it.canDetectOrientation()) it.enable() }
+
+        initCamera()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -105,12 +150,12 @@ class BlinkCameraService : LifecycleService() {
         return START_NOT_STICKY
     }
 
-    private fun startCamera() {
+    private fun initCamera() {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
+            if (destroyed) return@addListener
             try {
-                val provider = future.get()
-                cameraProvider = provider
+                cameraProvider = future.get()
                 val analysis = ImageAnalysis.Builder()
                     .setResolutionSelector(
                         ResolutionSelector.Builder()
@@ -126,14 +171,73 @@ class BlinkCameraService : LifecycleService() {
                     .build()
                 analysis.setAnalyzer(analysisExecutor) { proxy -> analyze(proxy) }
                 imageAnalysis = analysis
-                provider.unbindAll()
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+                cameraProvider?.unbindAll()
+                refreshCameraState()
             } catch (e: Exception) {
-                Log.e(TAG, "Camera start failed", e)
+                Log.e(TAG, "Camera init failed", e)
                 LiveState.update { it.copy(error = "Impossible d’ouvrir la caméra frontale") }
                 stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    /** Is there anything to detect right now? */
+    private fun wantsDetection(): Boolean {
+        if (!powerManager.isInteractive) return false
+        if (LiveState.uiVisible) return true
+        if (!settings.onlyTargetApps) return true
+        return ScrollAccessibilityService.instance?.isTargetAppInForeground() == true
+    }
+
+    /** Turns the camera on immediately when needed, off after a short delay when not. */
+    private fun refreshCameraState() {
+        mainHandler.post {
+            if (destroyed) return@post
+            mainHandler.removeCallbacks(pauseCamera)
+            when {
+                wantsDetection() -> setCameraActive(true)
+                // Screen off: stop right away. App switch: wait a little, it may be brief.
+                !powerManager.isInteractive -> setCameraActive(false)
+                cameraBound -> mainHandler.postDelayed(pauseCamera, CAMERA_OFF_DELAY_MS)
+            }
+        }
+    }
+
+    /** Main thread. */
+    private fun setCameraActive(active: Boolean) {
+        val provider = cameraProvider ?: return
+        val analysis = imageAnalysis ?: return
+        if (destroyed || active == cameraBound) return
+        try {
+            if (active) {
+                val camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+                camera.cameraInfo.cameraState.removeObservers(this)
+                camera.cameraInfo.cameraState.observe(this) { state ->
+                    val error = state.error
+                    LiveState.update {
+                        it.copy(
+                            error = when {
+                                error == null -> null
+                                error.code == CameraState.ERROR_CAMERA_IN_USE ||
+                                    error.code == CameraState.ERROR_MAX_CAMERAS_IN_USE ->
+                                    "Caméra utilisée par une autre appli"
+                                else -> "Caméra indisponible (code ${error.code})"
+                            },
+                        )
+                    }
+                }
+            } else {
+                provider.unbind(analysis)
+                wasPaused = true
+                detector.reset()
+                LiveState.update { it.copy(faceDetected = false, left = -1f, right = -1f) }
+            }
+            cameraBound = active
+            LiveState.update { it.copy(cameraOn = active) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera ${if (active) "bind" else "unbind"} failed", e)
+            LiveState.update { it.copy(error = "Impossible d’ouvrir la caméra frontale") }
+        }
     }
 
     /** Runs on the analysis thread for every camera frame. */
@@ -141,41 +245,32 @@ class BlinkCameraService : LifecycleService() {
     private fun analyze(proxy: ImageProxy) {
         val image = proxy.image
         val detectorClient = faceDetector
-        if (image == null || detectorClient == null) {
+        if (image == null || detectorClient == null || destroyed) {
             proxy.close()
             return
         }
-        if (!shouldAnalyze()) {
-            if (!wasPaused) {
-                wasPaused = true
-                LiveState.update { it.copy(faceDetected = false, left = -1f, right = -1f) }
-            }
-            // Nothing to do outside TikTok/Instagram: slow down to save battery.
-            try {
-                Thread.sleep(PAUSED_FRAME_DELAY_MS)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            }
+        if (!wantsDetection()) {
+            // The camera is about to be switched off; skip work in the meantime.
+            wasPaused = true
             proxy.close()
             return
         }
-        val input = InputImage.fromMediaImage(image, proxy.imageInfo.rotationDegrees)
-        // Listeners run on the main thread, where all detector state lives.
-        detectorClient.process(input)
-            .addOnSuccessListener { faces -> onFaces(faces) }
-            .addOnFailureListener { e -> Log.w(TAG, "Face detection failed", e) }
-            .addOnCompleteListener { proxy.close() }
-    }
-
-    private fun shouldAnalyze(): Boolean {
-        if (!powerManager.isInteractive) return false
-        if (LiveState.uiVisible) return true
-        if (!settings.onlyTargetApps) return true
-        return ScrollAccessibilityService.instance?.isTargetAppInForeground() == true
+        try {
+            val input = InputImage.fromMediaImage(image, proxy.imageInfo.rotationDegrees)
+            // Listeners run on the main thread, where all detector state lives.
+            detectorClient.process(input)
+                .addOnSuccessListener { faces -> onFaces(faces) }
+                .addOnFailureListener { e -> Log.w(TAG, "Face detection failed", e) }
+                .addOnCompleteListener { proxy.close() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot analyze frame", e)
+            proxy.close()
+        }
     }
 
     /** Main thread. */
     private fun onFaces(faces: List<Face>) {
+        if (destroyed) return
         if (wasPaused) {
             detector.reset()
             wasPaused = false
@@ -226,7 +321,7 @@ class BlinkCameraService : LifecycleService() {
             "Détection des clins d’œil",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Affichée tant que la caméra surveille tes clins d’œil"
+            description = "Affichée tant que la détection des clins d’œil est démarrée"
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -257,13 +352,21 @@ class BlinkCameraService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        destroyed = true
+        mainHandler.removeCallbacksAndMessages(null)
+        LiveState.contextChanged = null
+        if (receiverRegistered) {
+            unregisterReceiver(screenReceiver)
+            receiverRegistered = false
+        }
+        orientationListener?.disable()
         imageAnalysis?.clearAnalyzer()
         cameraProvider?.unbindAll()
         faceDetector?.close()
         faceDetector = null
         analysisExecutor.shutdown()
         LiveState.update {
-            it.copy(running = false, faceDetected = false, left = -1f, right = -1f)
+            it.copy(running = false, cameraOn = false, faceDetected = false, left = -1f, right = -1f)
         }
         super.onDestroy()
     }
@@ -272,7 +375,7 @@ class BlinkCameraService : LifecycleService() {
         private const val TAG = "BlinkScroll"
         private const val CHANNEL_ID = "detection"
         private const val NOTIFICATION_ID = 1
-        private const val PAUSED_FRAME_DELAY_MS = 150L
+        private const val CAMERA_OFF_DELAY_MS = 3_000L
         const val ACTION_STOP = "app.blinkscroll.action.STOP"
 
         fun start(context: Context) {

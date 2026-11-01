@@ -4,9 +4,10 @@ Appli Android qui fait défiler TikTok et Instagram d’un clin d’œil, grâce
 
 ## Fonctionnement
 
-- **Détection** : la caméra frontale tourne dans un service de premier plan (notification « Blink Scroll actif »). ML Kit (Google, en local, rien n’est envoyé) estime à chaque image si chaque œil est ouvert.
+- **Détection** : la caméra frontale tourne dans un service de premier plan (notification « Blink Scroll actif »). ML Kit (Google, exécuté sur le téléphone) estime à chaque image si chaque œil est ouvert.
 - **Défilement** : un service d’accessibilité simule un balayage vers le haut (vidéo suivante) ou vers le bas (précédente). Il regarde seulement quelle appli est au premier plan ; il ne lit pas le contenu de l’écran.
-- **Économie** : hors de TikTok/Instagram, ou écran éteint, l’analyse est suspendue.
+- **Économie** : écran éteint, la caméra est coupée immédiatement ; hors de TikTok/Instagram, après 3 secondes. Elle se rallume toute seule au retour.
+- **Confidentialité** : la permission Internet est retirée de l’appli, rien ne quitte le téléphone.
 
 ## Déclencheurs
 

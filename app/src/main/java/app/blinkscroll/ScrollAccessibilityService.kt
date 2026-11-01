@@ -37,7 +37,9 @@ class ScrollAccessibilityService : AccessibilityService() {
         } catch (e: RuntimeException) {
             null
         }
+        val wasTarget = isTargetAppInForeground()
         foregroundPackage = active ?: fallback ?: foregroundPackage
+        if (isTargetAppInForeground() != wasTarget) LiveState.contextChanged?.invoke()
     }
 
     fun isTargetAppInForeground(): Boolean = foregroundPackage in TARGET_PACKAGES

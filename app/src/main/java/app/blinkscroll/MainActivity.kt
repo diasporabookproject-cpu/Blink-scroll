@@ -43,7 +43,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+            )
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
@@ -136,8 +138,9 @@ class MainActivity : AppCompatActivity() {
     private fun render(state: LiveSnapshot) {
         binding.btnStart.text = if (state.running) "Arrêter" else "Démarrer"
         binding.liveStatus.text = when {
-            state.error != null && !state.running -> state.error
+            state.error != null -> state.error
             !state.running -> "Détection arrêtée"
+            !state.cameraOn -> "En veille — se réactive dans TikTok ou Instagram"
             !state.faceDetected -> "Aucun visage détecté"
             else -> "Visage détecté — fais un clin d’œil"
         }
@@ -155,7 +158,7 @@ class MainActivity : AppCompatActivity() {
         value: Float,
         state: LiveSnapshot,
     ) {
-        if (!state.running || !state.faceDetected || value < 0f) {
+        if (!state.running || !state.cameraOn || !state.faceDetected || value < 0f) {
             bar.setProgressCompat(0, false)
             label.text = name
             return
