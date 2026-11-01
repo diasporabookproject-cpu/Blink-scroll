@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Blink Scroll</string>
+    <string name="accessibility_label">Blink Scroll</string>
+    <string name="accessibility_description">Permet à Blink Scroll de faire défiler TikTok et Instagram quand tu fais un clin d’œil. L’appli ne lit pas le contenu de l’écran : elle regarde seulement quelle appli est ouverte et simule un balayage.</string>
+</resources>

@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="40dp">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Blink Scroll"
+            android:textAppearance="?attr/textAppearanceHeadlineLarge"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Fais défiler TikTok et Instagram d’un clin d’œil."
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <!-- 1. Setup -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="1 · Autorisations" />
+
+        <LinearLayout style="@style/SetupRow">
+
+            <TextView
+                android:id="@+id/statusCamera"
+                style="@style/SetupLabel"
+                android:text="Caméra" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCamera"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Autoriser" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/SetupRow">
+
+            <TextView
+                android:id="@+id/statusAccess"
+                style="@style/SetupLabel"
+                android:text="Service d’accessibilité" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAccess"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Activer" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/restrictedHelp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Dans Accessibilité, cherche « Blink Scroll » (souvent sous « Applis installées » ou « Applications téléchargées »). Si l’interrupteur est grisé ou qu’Android parle de « paramètre restreint » : ouvre les infos de l’appli → menu ⋮ en haut à droite → « Autoriser les paramètres restreints », puis réessaie."
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?android:attr/textColorSecondary" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAppInfo"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="-12dp"
+                android:text="Ouvrir les infos de l’appli" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="20dp"
+            android:text="Démarrer"
+            android:textSize="18sp"
+            app:cornerRadius="32dp" />
+
+        <!-- 2. Live test -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="2 · Test en direct" />
+
+        <TextView
+            android:id="@+id/liveStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Détection arrêtée"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+        <TextView
+            android:id="@+id/labelLeft"
+            style="@style/EyeLabel"
+            android:text="Œil gauche" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressLeft"
+            style="@style/EyeBar" />
+
+        <TextView
+            android:id="@+id/labelRight"
+            style="@style/EyeLabel"
+            android:text="Œil droit" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/progressRight"
+            style="@style/EyeBar" />
+
+        <TextView
+            android:id="@+id/count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:includeFontPadding="false"
+            android:text="0"
+            android:textColor="?attr/colorPrimary"
+            android:textSize="72sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/lastAction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="clin d’œil détecté"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <!-- 3. Settings -->
+        <TextView
+            style="@style/SectionTitle"
+            android:text="3 · Réglages" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Déclencheur"
+            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+        <RadioGroup
+            android:id="@+id/modeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp">
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/modeWinkAny"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Clin d’œil (n’importe quel œil) → suivante" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/modeWinkLeftRight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Œil droit → suivante · œil gauche → précédente" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/modeLongBlink"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Yeux fermés longtemps → suivante" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/modeDoubleBlink"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Double clignement → suivante" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/holdLabel"
+            style="@style/SliderLabel"
+            android:text="Durée du clin d’œil : 250 ms" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/sliderHold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stepSize="50"
+            android:value="250"
+            android:valueFrom="150"
+            android:valueTo="800" />
+
+        <TextView
+            android:id="@+id/thresholdLabel"
+            style="@style/SliderLabel"
+            android:text="Œil considéré fermé sous : 30 %" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/sliderThreshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stepSize="5"
+            android:value="30"
+            android:valueFrom="10"
+            android:valueTo="50" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchOnlyTargets"
+            style="@style/SettingSwitch"
+            android:text="Seulement dans TikTok et Instagram" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchVibrate"
+            style="@style/SettingSwitch"
+            android:text="Vibrer à chaque défilement" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switchSwap"
+            style="@style/SettingSwitch"
+            android:text="Inverser œil gauche / droit" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Pose le téléphone face à toi, visage bien éclairé. Ici, l’appli ne fait que tester : le défilement réel se fait dans TikTok ou Instagram. La caméra reste allumée tant que la détection tourne, ce qui consomme de la batterie : arrête-la depuis la notification."
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?android:attr/textColorSecondary" />
+    </LinearLayout>
+</ScrollView>
