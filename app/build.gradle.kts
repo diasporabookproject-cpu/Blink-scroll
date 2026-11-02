@@ -11,8 +11,8 @@ android {
         applicationId = "app.blinkscroll"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
 
         ndk {
             // Phones only: keeps the APK small (ML Kit ships native libraries).

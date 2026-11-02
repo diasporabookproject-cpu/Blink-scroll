@@ -16,10 +16,19 @@
     <uses-feature
         android:name="android.hardware.camera.front"
         android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.sensor.proximity"
+        android:required="false" />
 
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -41,10 +50,19 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".BlinkCameraService"
+        <activity
+            android:name=".CalibrationActivity"
             android:exported="false"
-            android:foregroundServiceType="camera" />
+            android:parentActivityName=".MainActivity" />
+
+        <service
+            android:name=".DetectionService"
+            android:exported="false"
+            android:foregroundServiceType="camera|microphone|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Hands-free scrolling triggered by a hand passing over the proximity sensor" />
+        </service>
 
         <service
             android:name=".ScrollAccessibilityService"

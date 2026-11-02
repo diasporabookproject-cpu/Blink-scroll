@@ -25,22 +25,7 @@ jobs:
       - name: Unit tests + release APK
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleRelease
-
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk BlinkScroll.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BlinkScroll-apk
-          path: BlinkScroll.apk
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-reports
-          path: app/build/reports/tests/
-          if-no-files-found: ignore
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleRelease 2>&1 | tee build-log.txt
 
       - name: Test summary
         if: always()
@@ -48,14 +33,40 @@ jobs:
           python3 - <<'EOF'
           import glob, xml.etree.ElementTree as ET
           total = failures = 0
-          for f in glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
+          lines = []
+          for f in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
               r = ET.parse(f).getroot()
               total += int(r.get("tests", 0))
               failures += int(r.get("failures", 0)) + int(r.get("errors", 0))
-          line = f"Unit tests: {total} run, {failures} failed"
-          print(line)
-          open("test-summary.txt", "w").write(line + "\n")
+              for case in r.iter("testcase"):
+                  for fail in list(case.iter("failure")) + list(case.iter("error")):
+                      lines.append(f"FAIL {case.get('classname')}.{case.get('name')}: {(fail.get('message') or '')[:300]}")
+              out = r.find("system-out")
+              if out is not None and out.text and out.text.strip():
+                  lines.append(f"--- stdout {r.get('name')}:\n{out.text.strip()[:3000]}")
+          summary = f"Unit tests: {total} run, {failures} failed\n" + "\n".join(lines)
+          print(summary)
+          open("test-summary.txt", "w").write(summary + "\n")
           EOF
+
+      # Results on the "ci-results" branch, readable even when the build fails.
+      - name: Publish CI results
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/results
+          cp test-summary.txt /tmp/results/ 2>/dev/null || true
+          tail -n 400 build-log.txt > /tmp/results/build-log.txt 2>/dev/null || true
+          echo "${GITHUB_SHA::7} ${{ job.status }}" > /tmp/results/commit.txt
+          cd /tmp/results
+          git init -q -b ci-results
+          git -c user.name="github-actions" -c user.email="actions@github.com" add -A
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -qm "CI ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-results
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk BlinkScroll.apk
 
       # Latest APK as a GitHub release (easy to download from the phone)
       # and on the "apk" branch (single commit, overwritten on each build).
