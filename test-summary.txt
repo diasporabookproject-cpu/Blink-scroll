@@ -1,0 +1,6 @@
+Unit tests: 35 run, 0 failed
+--- stdout app.blinkscroll.audio.SoundEngineTest:
+other sound: 0.551
+single: 0.978/0.862
+typing: max score 0.6777876 over 24 strokes
+threshold=0.8622628 separation=0.29998922 quality=GOOD
