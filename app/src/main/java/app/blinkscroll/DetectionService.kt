@@ -258,6 +258,7 @@ class DetectionService : LifecycleService() {
         if (destroyed || on == active) return
         active = on
         if (on) {
+            LiveState.update { it.copy(error = null) }
             soundEngine?.reset()
             if (audioCapture?.start() == false) {
                 LiveState.update { it.copy(error = "Micro indisponible") }

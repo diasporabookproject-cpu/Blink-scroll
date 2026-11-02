@@ -88,6 +88,7 @@ class CalibrationActivity : AppCompatActivity() {
             insets
         }
         settings = AppSettings(this)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // The detection service would compete for the microphone.
         if (LiveState.state.value.running) {
@@ -272,8 +273,8 @@ class CalibrationActivity : AppCompatActivity() {
             Step.INTRO_NOISE -> {
                 b.stepLabel.text = "Étape 2 sur 2 · Ce qu’il faut ignorer"
                 b.instruction.text = "Parfait. Maintenant, tape au clavier normalement pendant 10 secondes, " +
-                    "comme quand tu travailles.\n\nSi tu regardes tes vidéos avec le son, lance-en une " +
-                    "pendant ce temps : l’appli apprendra à l’ignorer aussi."
+                    "comme quand tu travailles.\n\nBon à savoir : le son des vidéos sorti du téléphone " +
+                    "peut gêner la reconnaissance. Volume bas ou écouteurs, c’est l’idéal."
                 b.primaryButton.text = "Commencer (10 s)"
             }
             Step.RECORD_NOISE -> {

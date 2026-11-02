@@ -37,7 +37,10 @@ class SoundTriggerEngine(
             }
         },
         onHop = { position ->
-            pattern.onTick(AudioConfig.samplesToMs(position))?.let { listener?.onAction(it) }
+            // Sounds are dated by their start but recognised SEGMENT - PRE_ONSET samples later:
+            // use the same delay so a second sound still counts within the double window.
+            val recognisedUpTo = position - (AudioConfig.SEGMENT - AudioConfig.PRE_ONSET)
+            pattern.onTick(AudioConfig.samplesToMs(recognisedUpTo))?.let { listener?.onAction(it) }
         },
     )
 

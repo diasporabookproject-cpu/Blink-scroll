@@ -24,7 +24,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.blinkscroll.audio.ProfileQuality
 import app.blinkscroll.databinding.ActivityMainBinding
 import com.google.android.material.progressindicator.LinearProgressIndicator
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
@@ -192,6 +194,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startDetection() {
+        LiveState.update { it.copy(error = null) }
         try {
             DetectionService.start(this)
         } catch (e: Exception) {
@@ -208,7 +211,10 @@ class MainActivity : AppCompatActivity() {
         refreshSetup()
         if (!LiveState.state.value.running) return
         DetectionService.stop(this)
-        binding.root.postDelayed({ if (!isFinishing) onStartClicked() }, 400)
+        lifecycleScope.launch {
+            withTimeoutOrNull(5_000) { LiveState.state.first { !it.running } }
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) onStartClicked()
+        }
     }
 
     // --- Settings ---------------------------------------------------------------

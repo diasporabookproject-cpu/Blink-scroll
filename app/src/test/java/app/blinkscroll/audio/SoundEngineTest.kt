@@ -178,6 +178,34 @@ class SoundEngineTest {
     }
 
     @Test
+    fun soundMadeDuringTypingStepDoesNotBlockIt() {
+        val rnd = Random(8)
+        val positives = Track(6.0, 31).apply {
+            for (k in 0 until 5) add(0.5 + k * 1.0, click(amp = 0.2, rnd = rnd))
+        }
+        val negatives = Track(10.0, 32).apply {
+            var t = 0.3
+            while (t < 9.7) {
+                if (t !in 4.8..5.3) add(t, keystroke(rnd))
+                t += 0.12 + rnd.nextDouble() * 0.2
+            }
+            add(5.05, click(amp = 0.25, rnd = rnd)) // the user clicked once while typing
+        }
+        val profile = SoundCalibrator.build(fingerprints(positives.data), fingerprints(negatives.data))
+        val track = Track(3.0, 33).apply { add(1.0, click(amp = 0.25, rnd = Random(9))) }
+        assertEquals(listOf(NEXT), run(profile, track.data).first)
+    }
+
+    @Test
+    fun silentStartDoesNotCreateFalseSounds() {
+        val track = FloatArray(sr * 2)
+        // 100 ms of digital silence (first AudioRecord buffers), then normal room noise.
+        val rnd = Random(10)
+        for (i in sr / 10 until track.size) track[i] = (rnd.nextFloat() - 0.5f) * 0.01f
+        assertEquals(0, fingerprints(track).size)
+    }
+
+    @Test
     fun profileSurvivesSaveAndLoad() {
         val profile = calibratedProfile()
         val file = File.createTempFile("profile", ".txt")

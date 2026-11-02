@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Reads the microphone (16 kHz mono) on a background thread and hands the samples,
@@ -14,16 +15,16 @@ class AudioCapture(
     private val onSamples: (samples: FloatArray, count: Int) -> Unit,
     private val onStopped: (() -> Unit)? = null,
 ) {
-    @Volatile
-    private var running = false
+    /** One flag per recording, so a slow-to-stop thread can never be revived by a new start(). */
+    private var runningFlag: AtomicBoolean? = null
     private var thread: Thread? = null
 
-    val isRunning: Boolean get() = running
+    val isRunning: Boolean get() = runningFlag?.get() == true
 
     /** Requires the RECORD_AUDIO permission (checked by callers). */
     @SuppressLint("MissingPermission")
     fun start(): Boolean {
-        if (running) return true
+        if (isRunning) return true
         val minBuffer = AudioRecord.getMinBufferSize(
             AudioConfig.SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -47,13 +48,14 @@ class AudioCapture(
             record.release()
             return false
         }
-        running = true
+        val running = AtomicBoolean(true)
+        runningFlag = running
         thread = Thread({
             val shorts = ShortArray(CHUNK)
             val floats = FloatArray(CHUNK)
             try {
                 record.startRecording()
-                while (running) {
+                while (running.get()) {
                     val n = record.read(shorts, 0, CHUNK)
                     if (n < 0) {
                         Log.w(TAG, "AudioRecord.read error $n")
@@ -71,9 +73,7 @@ class AudioCapture(
                     // already stopped
                 }
                 record.release()
-                val unexpected = running
-                running = false
-                if (unexpected) onStopped?.invoke()
+                if (running.getAndSet(false)) onStopped?.invoke()
             }
         }, "BlinkScroll-audio").apply {
             priority = Thread.MAX_PRIORITY
@@ -83,7 +83,8 @@ class AudioCapture(
     }
 
     fun stop() {
-        running = false
+        runningFlag?.set(false)
+        runningFlag = null
         try {
             thread?.join(500)
         } catch (e: InterruptedException) {

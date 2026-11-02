@@ -193,7 +193,7 @@ class OnsetDetector(
     /** How much louder than the two previous hops (dB): keeps only sudden sounds. */
     private val jumpDb: Double = 6.0,
     /** Absolute floor (dBFS) below which nothing counts. */
-    private val minLevelDb: Double = -55.0,
+    private val minLevelDb: Double = -62.0,
     /** Hops ignored after an onset (~96 ms) so one sound gives one onset. */
     private val refractoryHops: Int = 12,
 ) {
@@ -201,6 +201,9 @@ class OnsetDetector(
     private var prev1 = -120.0
     private var prev2 = -120.0
     private var cooldown = 0
+
+    /** Hops of real signal seen since reset; no onsets during the warm-up. */
+    private var warmHops = 0
 
     /** Level of the last hop in dBFS. */
     var levelDb = -120.0
@@ -211,6 +214,7 @@ class OnsetDetector(
         prev1 = -120.0
         prev2 = -120.0
         cooldown = 0
+        warmHops = 0
     }
 
     fun process(hop: FloatArray, offset: Int = 0, length: Int = AudioConfig.HOP): Boolean {
@@ -218,20 +222,34 @@ class OnsetDetector(
         for (i in offset until offset + length) sum += hop[i] * hop[i]
         val db = 10.0 * log10(sum / length + 1e-12)
         levelDb = db
+        // Digital silence (the first buffers of a recording, a muted mic): no information.
+        if (db < SILENCE_DB) return false
         if (background.isNaN()) background = db
 
-        val onset = cooldown == 0 &&
+        val warmingUp = warmHops < WARM_UP_HOPS
+        if (warmingUp) warmHops++
+        val onset = !warmingUp &&
+            cooldown == 0 &&
             db > minLevelDb &&
             db - background >= riseDb &&
             db - minOf(prev1, prev2) >= jumpDb
         if (cooldown > 0) cooldown--
         if (onset) cooldown = refractoryHops
 
-        // Background follows quiet passages quickly and loud bursts slowly.
-        background += if (db < background) 0.2 * (db - background) else 0.01 * (db - background)
+        // Background follows quiet passages quickly and loud bursts slowly (fast both ways while warming up).
+        background += when {
+            warmingUp -> 0.3 * (db - background)
+            db < background -> 0.2 * (db - background)
+            else -> 0.01 * (db - background)
+        }
         prev2 = prev1
         prev1 = db
         return onset
+    }
+
+    private companion object {
+        const val SILENCE_DB = -100.0
+        const val WARM_UP_HOPS = 25
     }
 }
 

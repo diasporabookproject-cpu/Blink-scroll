@@ -130,14 +130,23 @@ object SoundCalibrator {
             separation = 0f
         } else {
             separation = weakestGenuine - strongestLookAlike
+            // Samples recorded back to back resemble each other more than later repetitions,
+            // so when the margin allows it, sit well below the weakest sample (up to 0.12).
             threshold = when {
-                separation >= 0.10f -> weakestGenuine - 0.05f
+                separation >= 0.10f -> maxOf(weakestGenuine - 0.12f, strongestLookAlike + separation * 0.5f)
                 else -> strongestLookAlike + separation * 0.5f
             }
         }
+        // Drop the rare noises that look like the user's sound (e.g. made while typing):
+        // matching requires a sound to be closer to the samples than to every stored noise.
+        val keptNegatives = if (strongestLookAlike != null && usedNegatives.size >= 30) {
+            usedNegatives.filter { n -> positives.maxOf { dot(it, n) } <= strongestLookAlike }
+        } else {
+            usedNegatives
+        }
         return SoundProfile(
             positives = positives.map { it.copyOf() },
-            negatives = usedNegatives.map { it.copyOf() },
+            negatives = keptNegatives.map { it.copyOf() },
             threshold = threshold.coerceIn(SoundProfile.MIN_THRESHOLD, SoundProfile.MAX_THRESHOLD),
             separation = separation,
         )
